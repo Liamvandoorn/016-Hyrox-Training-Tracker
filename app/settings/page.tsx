@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import Navbar from "@/components/Navbar";
+import WorkoutHistoryManager from "@/components/WorkoutHistoryManager";
 
 export default function SettingsPage() {
   const [passcode, setPasscode] = useState("");
@@ -19,9 +20,9 @@ export default function SettingsPage() {
     <div className="min-h-screen bg-transparent pb-28 pt-5">
       <header className="mx-auto max-w-2xl px-4 pb-2">
         <div className="py-3">
-          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#66839a]">HYROX · TRAINING LOG</p>
-          <h1 className="mt-1 text-[25px] font-semibold tracking-[-0.04em] text-[#202d37]">Settings</h1>
-          <p className="mt-1 text-sm text-slate-500">Manage your app preferences.</p>
+          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#9ab0c4]">HYROX · TRAINING LOG</p>
+          <h1 className="mt-1 text-[25px] font-semibold tracking-[-0.04em] text-[#edf3f8]">Settings</h1>
+          <p className="mt-1 text-sm text-slate-400">Manage your app preferences.</p>
         </div>
       </header>
 
@@ -71,6 +72,8 @@ export default function SettingsPage() {
             </div>
           </div>
         </div>
+
+        <WorkoutHistoryManager />
 
         {/* App Info Section */}
         <div className="mb-5 rounded-[1.7rem] border border-white/80 bg-white/80 p-5 shadow-sm sm:p-7">
