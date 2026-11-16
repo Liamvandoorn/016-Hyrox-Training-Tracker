@@ -1,5 +1,7 @@
 # Hyrox Training Tracker
 
+*100% Vibe coded* But i'll leave it forkable for anyone wanting their own Hyrox Tracker without needing to spend tokens for the initial setup.
+
 A progressive web app (PWA) built with Next.js for tracking Hyrox training sessions. Secure passcode protection, offline-capable, and stores all training data in a Neon PostgreSQL database.
 
 ## Features
