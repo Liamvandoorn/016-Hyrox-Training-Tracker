@@ -9,14 +9,7 @@ import {
   requiresWeight,
   WORKOUT_CATEGORIES,
 } from "@/lib/types";
-import type { WorkoutSet, WorkoutSetUnit, WorkoutSource } from "@/lib/types";
-
-const samplePlan = [
-  { category: "Running", amount: 500, unit: "m" as const, timeSeconds: 160, restSeconds: 60 },
-  { category: "Running", amount: 500, unit: "m" as const, timeSeconds: 160, restSeconds: 60 },
-  { category: "Running", amount: 500, unit: "m" as const, timeSeconds: 160, restSeconds: 60 },
-  { category: "Running", amount: 500, unit: "m" as const, timeSeconds: 160, restSeconds: 60 },
-];
+import type { WorkoutPlan, WorkoutSet, WorkoutSetUnit, WorkoutSource } from "@/lib/types";
 
 type PageMode = "choose" | "plan" | "workout" | "finished";
 
@@ -38,26 +31,68 @@ function formatTime(seconds: number) {
   return `${String(minutes).padStart(2, "0")}:${String(remainingSeconds).padStart(2, "0")}`;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isWorkoutPlan(value: unknown): value is WorkoutPlan {
+  return (
+    isRecord(value) &&
+    typeof value.id === "number" &&
+    typeof value.name === "string" &&
+    Array.isArray(value.sets) &&
+    value.sets.every(
+      (set) =>
+        isRecord(set) &&
+        typeof set.id === "string" &&
+        typeof set.category === "string" &&
+        typeof set.amount === "number" &&
+        Number.isFinite(set.amount) &&
+        set.amount > 0 &&
+        (set.unit === "m" || set.unit === "kg" || set.unit === "reps") &&
+        (set.weightKg === undefined ||
+          (typeof set.weightKg === "number" && Number.isFinite(set.weightKg))) &&
+        typeof set.timeSeconds === "number" &&
+        Number.isInteger(set.timeSeconds) &&
+        typeof set.restSeconds === "number" &&
+        Number.isInteger(set.restSeconds) &&
+        typeof set.completed === "boolean"
+    ) &&
+    typeof value.created_at === "string" &&
+    typeof value.updated_at === "string"
+  );
+}
+
 interface TimeInputProps {
   label: string;
   value: string;
   onChange: (value: string) => void;
+  autoFocus?: boolean;
+  onBlur?: React.FocusEventHandler<HTMLDivElement>;
+  onKeyDown?: React.KeyboardEventHandler<HTMLDivElement>;
+  className?: string;
 }
 
-function TimeInput({ label, value, onChange }: TimeInputProps) {
+function TimeInput({ label, value, onChange, autoFocus, onBlur, onKeyDown, className }: TimeInputProps) {
   const [minutes = "", seconds = ""] = value.split(":");
 
   return (
     <div
       role="group"
       aria-label={label}
-      className="flex h-10 items-center justify-center rounded-lg border border-slate-200 bg-[#f7f9fb] px-1 focus-within:border-[#9bb4c7]"
+      onBlur={onBlur}
+      onKeyDown={onKeyDown}
+      className={className ?? "flex h-10 items-center justify-center rounded-lg border border-slate-200 bg-[#f7f9fb] px-1 focus-within:border-[#9bb4c7]"}
     >
       <input
         type="text"
         inputMode="numeric"
         pattern="[0-9]*"
         maxLength={3}
+        autoFocus={autoFocus}
+        onFocus={(event) => {
+          if (autoFocus) event.currentTarget.select();
+        }}
         value={minutes}
         onChange={(event) =>
           onChange(`${event.target.value.replace(/\D/g, "").slice(0, 3)}:${seconds}`)
@@ -91,7 +126,9 @@ interface EditableValueProps {
   value: string;
   suffix?: string;
   label: string;
+  fieldLabel: string;
   inputMode?: "decimal" | "text";
+  isTime?: boolean;
   onSave: (value: string) => void;
 }
 
@@ -99,7 +136,9 @@ function EditableValue({
   value,
   suffix,
   label,
+  fieldLabel,
   inputMode = "text",
+  isTime = false,
   onSave,
 }: EditableValueProps) {
   const [editing, setEditing] = useState(false);
@@ -110,39 +149,65 @@ function EditableValue({
     onSave(draft.trim());
   };
 
-  if (editing) {
-    return (
-      <input
-        autoFocus
-        aria-label={label}
-        inputMode={inputMode}
-        value={draft}
-        onChange={(event) => setDraft(event.target.value)}
-        onBlur={save}
-        onKeyDown={(event) => {
-          if (event.key === "Enter") event.currentTarget.blur();
-          if (event.key === "Escape") {
-            setDraft(value);
-            setEditing(false);
-          }
-        }}
-        className="w-[70px] rounded-lg border border-[#9bb4c7] bg-white px-2 py-1 text-right text-sm font-semibold text-slate-800 outline-none focus:ring-2 focus:ring-[#dce8f0]"
-      />
-    );
-  }
-
   return (
-    <button
-      type="button"
-      aria-label={`Edit ${label}`}
-      onClick={() => {
-        setDraft(value);
-        setEditing(true);
-      }}
-      className="rounded-md px-1.5 py-1 text-sm font-semibold tabular-nums text-slate-700 transition hover:bg-slate-100 hover:text-[#426987]"
-    >
-      {value}{suffix ? <span className="ml-1 text-[10px] font-medium text-slate-400">{suffix}</span> : null}
-    </button>
+    <div className="flex min-w-0 flex-col items-start gap-1">
+      <span className="text-[9px] font-semibold uppercase tracking-wide text-slate-400">{fieldLabel}</span>
+      {editing && isTime ? (
+        <TimeInput
+          label={label}
+          value={draft}
+          onChange={setDraft}
+          autoFocus
+          onBlur={(event) => {
+            if (!event.currentTarget.contains(event.relatedTarget)) save();
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              save();
+            } else if (event.key === "Escape") {
+              event.preventDefault();
+              setDraft(value);
+              setEditing(false);
+            }
+          }}
+          className="flex h-8 w-[86px] items-center justify-center rounded-lg border border-[#9bb4c7] bg-white px-1 focus-within:ring-2 focus-within:ring-[#dce8f0]"
+        />
+      ) : editing ? (
+        <input
+          autoFocus
+          onFocus={(event) => event.currentTarget.select()}
+          aria-label={label}
+          inputMode={inputMode}
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          onBlur={save}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") event.currentTarget.blur();
+            if (event.key === "Escape") {
+              setDraft(value);
+              setEditing(false);
+            }
+          }}
+          className="h-8 w-[70px] rounded-lg border border-[#9bb4c7] bg-white px-2 py-1 text-left text-sm font-semibold tabular-nums text-slate-800 outline-none focus:ring-2 focus:ring-[#dce8f0]"
+        />
+      ) : (
+        <button
+          type="button"
+          aria-label={`Edit ${label}`}
+          onClick={() => {
+            setDraft(value);
+            setEditing(true);
+          }}
+          className="inline-flex min-h-8 items-center justify-start gap-1 rounded-md border border-slate-200 bg-slate-50 px-1.5 py-1 text-left text-sm font-semibold tabular-nums text-slate-700 transition hover:border-[#9bb4c7] hover:bg-slate-100 hover:text-[#426987]"
+        >
+          {value}{suffix ? <span className="ml-1 text-[10px] font-medium text-slate-400">{suffix}</span> : null}
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className="h-3 w-3 shrink-0 text-slate-400" aria-hidden="true">
+            <path d="m15 5 4 4M4 20l4-.8L19 8a2.1 2.1 0 0 0-3-3L5 16l-1 4Z" />
+          </svg>
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -161,6 +226,9 @@ export default function WorkoutPage() {
   const [workoutName, setWorkoutName] = useState("My workout");
   const [date, setDate] = useState(localDateValue);
   const [sets, setSets] = useState<WorkoutSet[]>([]);
+  const [availablePlans, setAvailablePlans] = useState<WorkoutPlan[]>([]);
+  const [isLoadingPlans, setIsLoadingPlans] = useState(false);
+  const [plansError, setPlansError] = useState("");
   const [category, setCategory] = useState<string>(WORKOUT_CATEGORIES[0]);
   const [amount, setAmount] = useState("500");
   const [weight, setWeight] = useState("50");
@@ -215,14 +283,14 @@ export default function WorkoutPage() {
     setMode("workout");
   }, []);
 
-  const startPlannedWorkout = () => {
+  const startPlannedWorkout = (plan: WorkoutPlan) => {
     setShowStartSheet(false);
     setSource("plan");
-    setWorkoutName("HYROX running intervals");
-    setNameDraft("HYROX running intervals");
+    setWorkoutName(plan.name);
+    setNameDraft(plan.name);
     setDate(localDateValue());
     setSets(
-      samplePlan.map((set) => ({
+      plan.sets.map((set) => ({
         ...set,
         id: crypto.randomUUID(),
         completed: false,
@@ -453,6 +521,45 @@ export default function WorkoutPage() {
     }
   };
 
+  useEffect(() => {
+    if (mode !== "plan") return;
+    let cancelled = false;
+
+    async function loadPlans() {
+      setIsLoadingPlans(true);
+      setPlansError("");
+      try {
+        const response = await fetch("/api/plans", { cache: "no-store" });
+        const payload: unknown = await response.json();
+        if (
+          !response.ok ||
+          !Array.isArray(payload) ||
+          !payload.every(isWorkoutPlan)
+        ) {
+          throw new Error(
+            isRecord(payload) && typeof payload.error === "string"
+              ? payload.error
+              : "Could not load workout plans."
+          );
+        }
+        if (!cancelled) setAvailablePlans(payload);
+      } catch (loadError) {
+        if (!cancelled) {
+          setPlansError(
+            loadError instanceof Error ? loadError.message : "Could not load workout plans."
+          );
+        }
+      } finally {
+        if (!cancelled) setIsLoadingPlans(false);
+      }
+    }
+
+    void loadPlans();
+    return () => {
+      cancelled = true;
+    };
+  }, [mode]);
+
   return (
     <main className={`min-h-screen px-3 pt-5 sm:px-5 sm:pt-8 ${mode === "workout" ? "pb-[310px]" : "pb-28"}`}>
       <div className="mx-auto max-w-[680px]">
@@ -506,7 +613,7 @@ export default function WorkoutPage() {
 
         {mode === "plan" && (
           <div className="rounded-[1.8rem] border border-white/80 bg-white/60 p-5 text-sm text-slate-500">
-            Review today&apos;s sample plan, then import its sets to begin.
+            Choose one of your saved plans to start a workout.
           </div>
         )}
 
@@ -567,6 +674,11 @@ export default function WorkoutPage() {
                 <h2 className="text-base font-semibold text-slate-800">Added sets</h2>
                 <span className="rounded-full bg-[#edf3f7] px-2.5 py-1 text-[10px] font-semibold text-slate-500">{sets.length} {sets.length === 1 ? "set" : "sets"}</span>
               </div>
+              {sets.length > 0 && (
+                <p className="mb-3 text-xs text-slate-500">
+                  Tap a set value to edit it{source === "plan" ? "; your saved plan stays unchanged" : ""}.
+                </p>
+              )}
               {sets.length === 0 ? (
                 <div className="rounded-xl border border-dashed border-slate-200 bg-[#f9fbfc] px-4 py-6 text-center text-xs text-slate-400">
                   No sets yet. Add your first set below.
@@ -596,9 +708,10 @@ export default function WorkoutPage() {
                             <span className="min-w-0">
                               <span className={`block text-[9px] ${set.completed ? "text-emerald-700" : "text-slate-400"}`}>{set.completed ? "Completed" : `Set ${index + 1}`}</span>
                             </span>
-                            <div className="flex min-w-0 flex-wrap items-center gap-1">
+                            <div className="flex min-w-0 flex-wrap items-start justify-start gap-x-2 gap-y-2">
                               <EditableValue
                                 label={`set ${index + 1} ${set.unit}`}
+                                fieldLabel={set.unit === "m" ? "Distance" : set.unit === "reps" ? "Reps" : "Weight"}
                                 value={String(set.amount)}
                                 suffix={set.unit}
                                 inputMode="decimal"
@@ -611,6 +724,7 @@ export default function WorkoutPage() {
                                       ? `set ${index + 1} weight per kettlebell`
                                       : `set ${index + 1} weight`
                                   }
+                                  fieldLabel={set.category === "Farmer carries" ? "Weight / bell" : "Weight"}
                                   value={String(set.weightKg)}
                                   suffix={set.category === "Farmer carries" ? "kg / bell" : "kg"}
                                   inputMode="decimal"
@@ -619,11 +733,15 @@ export default function WorkoutPage() {
                               )}
                               <EditableValue
                                 label={`set ${index + 1} time`}
+                                fieldLabel="Time"
+                                isTime
                                 value={formatTime(set.timeSeconds)}
                                 onSave={(value) => updateSetTime(set, value)}
                               />
                               <EditableValue
                                 label={`set ${index + 1} rest time`}
+                                fieldLabel="Rest"
+                                isTime
                                 value={formatTime(set.restSeconds)}
                                 onSave={(value) => updateSetRest(set, value)}
                               />
@@ -707,7 +825,7 @@ export default function WorkoutPage() {
         <div className="fixed inset-0 z-[60]">
           <button
             type="button"
-            aria-label="Close planned workout"
+            aria-label="Close planned workouts"
             onClick={() => {
               setMode("choose");
               setShowStartSheet(true);
@@ -718,14 +836,14 @@ export default function WorkoutPage() {
             role="dialog"
             aria-modal="true"
             aria-labelledby="planned-workout-title"
-            className="workout-sheet absolute left-1/2 w-[calc(100%-24px)] max-w-[420px] -translate-x-1/2 rounded-[1.7rem] border border-white/80 bg-white/95 p-5 shadow-[0_20px_60px_rgba(27,42,54,0.22)]"
+            className="workout-sheet absolute left-1/2 max-h-[min(72vh,620px)] w-[calc(100%-24px)] max-w-[420px] -translate-x-1/2 overflow-y-auto rounded-[1.7rem] border border-white/80 bg-white/95 p-5 shadow-[0_20px_60px_rgba(27,42,54,0.22)]"
             style={{ bottom: "calc(max(12px, env(safe-area-inset-bottom)) + 88px)" }}
           >
             <div className="mb-4 flex items-start justify-between gap-3">
               <div>
-                <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-[#66839a]">SAMPLE PLAN · SETTINGS COMING LATER</p>
-                <h2 id="planned-workout-title" className="mt-1 text-lg font-semibold text-slate-800">HYROX running intervals</h2>
-                <p className="mt-1 text-xs text-slate-500">The plan&apos;s sets will be added to your workout.</p>
+                <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-[#66839a]">SAVED WORKOUT PLANS</p>
+                <h2 id="planned-workout-title" className="mt-1 text-lg font-semibold text-slate-800">Choose a plan</h2>
+                <p className="mt-1 text-xs text-slate-500">The plan&apos;s sets will be copied into today&apos;s workout.</p>
               </div>
               <button
                 type="button"
@@ -739,21 +857,46 @@ export default function WorkoutPage() {
                 ×
               </button>
             </div>
-            <div className="mb-4 space-y-2">
-              {samplePlan.map((set, index) => (
-                <div key={index} className="flex items-center justify-between rounded-xl bg-[#f7f9fb] px-3 py-2.5 text-xs">
-                  <span className="font-medium text-slate-600">Run · Set {index + 1}</span>
-                  <span className="font-semibold tabular-nums text-slate-800">{set.amount} m · {formatTime(set.timeSeconds)} <span className="font-medium text-slate-500">rest {formatTime(set.restSeconds)}</span></span>
-                </div>
+            {isLoadingPlans && <p role="status" className="py-6 text-center text-sm text-slate-400">Loading plans...</p>}
+            {plansError && <p role="alert" className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{plansError}</p>}
+            {!isLoadingPlans && !plansError && availablePlans.length === 0 && (
+              <div className="rounded-xl border border-dashed border-slate-200 px-4 py-5 text-center">
+                <p className="text-sm font-medium text-slate-700">No saved plans yet.</p>
+                <p className="mt-1 text-xs text-slate-500">Create a workout plan in Settings first.</p>
+                <button
+                  type="button"
+                  onClick={() => router.push("/settings")}
+                  className="mt-3 rounded-lg bg-[#273744] px-3 py-2 text-xs font-semibold text-white hover:bg-[#354c5d]"
+                >
+                  Open Settings
+                </button>
+              </div>
+            )}
+            <div className="space-y-3">
+              {availablePlans.map((plan) => (
+                <article key={plan.id} className="rounded-xl border border-slate-100 bg-[#f7f9fb] p-3">
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <h3 className="truncate text-sm font-semibold text-slate-800">{plan.name}</h3>
+                    <span className="shrink-0 text-[10px] text-slate-400">{plan.sets.length} sets</span>
+                  </div>
+                  <ol className="mb-3 max-h-32 space-y-1 overflow-y-auto">
+                    {plan.sets.map((set, index) => (
+                      <li key={set.id} className="flex justify-between gap-2 text-[10px] text-slate-500">
+                        <span className="truncate">{index + 1}. {set.category} · {set.amount} {set.unit}{set.weightKg !== undefined ? ` · ${set.weightKg} kg` : ""}</span>
+                        <span className="shrink-0 tabular-nums">{formatTime(set.timeSeconds)} · rest {formatTime(set.restSeconds)}</span>
+                      </li>
+                    ))}
+                  </ol>
+                  <button
+                    type="button"
+                    onClick={() => startPlannedWorkout(plan)}
+                    className="w-full rounded-lg bg-[#273744] px-3 py-2.5 text-xs font-semibold text-white transition hover:bg-[#354c5d]"
+                  >
+                    Start plan
+                  </button>
+                </article>
               ))}
             </div>
-            <button
-              type="button"
-              onClick={startPlannedWorkout}
-              className="w-full rounded-xl bg-[#273744] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#354c5d]"
-            >
-              Start plan · import {samplePlan.length} sets
-            </button>
           </section>
         </div>
       )}
