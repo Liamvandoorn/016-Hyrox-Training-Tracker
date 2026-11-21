@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 import WorkoutStartSheet, { WorkoutFlow } from "@/components/WorkoutStartSheet";
+import { WORKOUT_DRAFT_KEY } from "@/lib/types";
 
 const items = [
   {
@@ -23,7 +24,7 @@ const items = [
   },
 ];
 
-export default function Navbar() {
+export default function Navbar({ workoutInProgress = false }: { workoutInProgress?: boolean }) {
   const pathname = usePathname();
   const router = useRouter();
   const [isWorkoutSheetOpen, setIsWorkoutSheetOpen] = useState(false);
@@ -60,10 +61,32 @@ export default function Navbar() {
                   if (pathname === "/workout") {
                     window.dispatchEvent(new Event("hyrox-open-workout-sheet"));
                   } else {
-                    setIsWorkoutSheetOpen((open) => !open);
+                    try {
+                      if (sessionStorage.getItem(WORKOUT_DRAFT_KEY) !== null) {
+                        router.push("/workout");
+                        return;
+                      }
+                      setIsWorkoutSheetOpen((open) => !open);
+                    } catch (error) {
+                      console.error("Could not check for an in-progress workout:", error);
+                      router.push("/workout");
+                    }
                   }
                 }}
                 className={className}
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className="h-[18px] w-[18px]" aria-hidden="true">
+                  {item.icon}
+                </svg>
+                <span className="text-[9px] font-semibold tracking-wide">{item.label}</span>
+              </button>
+            ) : workoutInProgress ? (
+              <button
+                key={item.href}
+                type="button"
+                disabled
+                title="Unavailable during a workout"
+                className="flex min-h-[54px] cursor-not-allowed flex-col items-center justify-center gap-1 rounded-[1.15rem] text-[#55525a]"
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className="h-[18px] w-[18px]" aria-hidden="true">
                   {item.icon}
